@@ -1,0 +1,27 @@
+/**
+ * @file config.h.template
+ * @brief Configuration template for ESP32 GLA WiFi Auto-Login
+ * 
+ * Copy this file to config.h and fill in your credentials.
+ * DO NOT commit config.h to version control!
+ */
+
+#ifndef PORTAL_USER_CONFIG_H
+#define PORTAL_USER_CONFIG_H
+
+// ============================================================================
+// WiFi Configuration
+// ============================================================================
+
+#define WIFI_SSID ""
+#define WIFI_PASSWORD ""
+
+// ============================================================================
+// Captive Portal Configuration
+// ============================================================================
+
+#define PORTAL_URL "https://cirm.onlinegla.com"
+#define PORTAL_USER ""
+#define PORTAL_PASS ""
+
+#endif // PORTAL_USER_CONFIG_H
