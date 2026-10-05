@@ -22,6 +22,8 @@ Copy `include/config.h.template` to `include/config.h` and set these macros usin
 
 Keep `include/config.h` private; Git ignores it. Credentials in this file are compiled into the firmware. Preferences/NVS is not encrypted by this application.
 
+Copy `include/portal_ca.h.template` to `include/portal_ca.h` and add the trusted HTTPS CA certificate for the portal as a C++ raw string literal. The default empty certificate is intentional: HTTPS requests fail closed until you configure a trusted certificate. Never use a certificate copied from an untrusted network as a trust anchor. Set `PORTAL_USERNAME_FIELD` and `PORTAL_PASSWORD_FIELD` in `config.h` if the portal uses non-standard form names.
+
 ## 3. Build and upload
 
 Open `esp32-gla-wifi-autologin` in PlatformIO, then run:

@@ -1,0 +1,8 @@
+#ifndef PORTAL_CA_CERTIFICATE_H
+#define PORTAL_CA_CERTIFICATE_H
+
+// Copy this file to portal_ca.h and replace the empty value with the trusted
+// CA PEM certificate for the HTTPS portal.
+static const char PORTAL_CA_CERTIFICATE[] PROGMEM = "";
+
+#endif

@@ -2,7 +2,7 @@
 #define SESSION_MANAGER_H
 
 #include <Arduino.h>
-#include "Config.h"
+#include "AppConfig.h"
 
 class SessionManager {
 public:

@@ -24,4 +24,8 @@
 #define PORTAL_USER ""
 #define PORTAL_PASS ""
 
+// Optional explicit form names; leave empty to infer from standard HTML.
+#define PORTAL_USERNAME_FIELD ""
+#define PORTAL_PASSWORD_FIELD ""
+
 #endif // PORTAL_USER_CONFIG_H

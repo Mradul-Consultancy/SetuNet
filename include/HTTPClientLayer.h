@@ -12,7 +12,8 @@ public:
     
     void begin();
     void setTimeout(int timeoutMs);
-    void setSSLValidation(bool validate);
+    void setCACertificate(const String& certificate);
+    void setClockReady(bool ready);
     
     int httpGET(const String& url, String& response, bool followRedirects = true);
     int httpPOST(const String& url, const String& postData, String& response);
@@ -30,7 +31,8 @@ private:
     WiFiClientSecure secureClient;
     
     int timeoutMs;
-    bool sslValidation;
+    String caCertificate;
+    bool clockReady;
     String cookies;
     std::map<String, String> customHeaders;
     std::map<String, String> responseHeaders;

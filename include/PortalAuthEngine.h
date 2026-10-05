@@ -4,13 +4,14 @@
 #include <Arduino.h>
 #include "HTTPClientLayer.h"
 #include "PortalDetector.h"
-#include "Config.h"
+#include "AppConfig.h"
 
 class PortalAuthEngine {
 public:
     PortalAuthEngine(HTTPClientLayer* httpClient, PortalDetector* detector);
     
-    bool begin(const String& username, const String& password, const String& portalURL);
+    bool begin(const String& username, const String& password, const String& portalURL,
+               const String& usernameField, const String& passwordField);
     bool authenticate();
     bool isAuthenticated();
     void clearSession();
@@ -24,6 +25,8 @@ private:
     String username;
     String password;
     String portalURL;
+    String configuredUsernameField;
+    String configuredPasswordField;
     String sessionCookie;
     bool authenticated;
     unsigned long lastAuthAttempt;

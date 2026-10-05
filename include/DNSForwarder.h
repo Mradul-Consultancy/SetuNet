@@ -4,7 +4,7 @@
 #include <Arduino.h>
 #include <WiFiUdp.h>
 #include <map>
-#include "Config.h"
+#include "AppConfig.h"
 
 class DNSForwarder {
 public:

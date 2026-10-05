@@ -100,7 +100,7 @@ This is a design/architecture document, not evidence that every described behavi
 **Responsibilities**:
 - Perform GET/POST requests
 - Manage cookies and headers
-- Handle SSL/TLS (with certificate bypass)
+- Validate HTTPS certificates against a configured trusted CA
 - Limit response size (16 KB max)
 - Retry on timeout (up to 3 times)
 
@@ -549,7 +549,8 @@ Log levels guide recovery:
 
 **Mitigations**:
 - No application-level NVS encryption is enabled; platform flash/NVS encryption must be configured separately
-- HTTPS certificate validation is disabled by default for compatibility; this is vulnerable to man-in-the-middle attacks on untrusted Wi-Fi
+- HTTPS requests fail closed unless the system clock is synchronized and a trusted CA certificate is configured
+- Login credentials are refused over HTTP or GET-form query strings
 - WPA2-PSK for AP
 - MAC address randomization option
 - Rate limiting on authentication

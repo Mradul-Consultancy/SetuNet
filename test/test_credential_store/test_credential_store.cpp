@@ -56,10 +56,16 @@ void test_validate_url() {
     config.portalURL = "invalid-url";
     TEST_ASSERT_FALSE(credStore.validateCredentials(config));
     config.portalURL = "http://valid.com";
-    TEST_ASSERT_TRUE(credStore.validateCredentials(config));
+    TEST_ASSERT_FALSE(credStore.validateCredentials(config));
     config.portalURL = "https://valid.com";
     TEST_ASSERT_TRUE(credStore.validateCredentials(config));
     config.portalURL = "https://";
+    TEST_ASSERT_FALSE(credStore.validateCredentials(config));
+}
+
+void test_router_mode_is_rejected() {
+    Config config = validConfig();
+    config.routerEnabled = true;
     TEST_ASSERT_FALSE(credStore.validateCredentials(config));
 }
 
@@ -87,6 +93,7 @@ void setup() {
     RUN_TEST(test_save_and_load_credentials);
     RUN_TEST(test_validate_ssid);
     RUN_TEST(test_validate_url);
+    RUN_TEST(test_router_mode_is_rejected);
     RUN_TEST(test_clear_credentials);
     RUN_TEST(test_default_config_does_not_embed_credentials);
     UNITY_END();

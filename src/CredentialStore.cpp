@@ -57,12 +57,10 @@ bool CredentialStore::loadCredentials(Config& config) {
     config.maxAuthRetries = preferences.getUChar("max_retries", 5);
     config.maxWiFiRetries = preferences.getUChar("max_wifi_retries", 20);
     config.routerEnabled = preferences.getBool("router_enabled", false);
-    
+
     if (config.routerEnabled) {
-        config.apSSID = preferences.getString("ap_ssid", "ESP32-Router");
-        config.apPassword = preferences.getString("ap_pass", "esp32router123");
-        config.apChannel = preferences.getUChar("ap_channel", 1);
-        config.maxClients = preferences.getUChar("max_clients", 4);
+        logger.warning("CredStore", "Saved router-mode setting ignored; router mode is disabled");
+        config.routerEnabled = false;
     }
     
     logger.info("CredStore", "Credentials loaded from NVS");
@@ -85,6 +83,11 @@ bool CredentialStore::clearCredentials() {
 }
 
 bool CredentialStore::validateCredentials(const Config& config) {
+    if (config.routerEnabled) {
+        logger.error("CredStore", "Router mode is not supported by this firmware");
+        return false;
+    }
+
     if (!validateSSID(config.wifiSSID.c_str())) {
         logger.error("CredStore", "Invalid WiFi SSID");
         return false;
@@ -145,8 +148,7 @@ bool CredentialStore::validateURL(const char* url) {
     
     String urlStr(url);
     int schemeEnd = urlStr.indexOf("://");
-    if (schemeEnd < 0 ||
-        (!urlStr.startsWith("http://") && !urlStr.startsWith("https://"))) {
+    if (schemeEnd < 0 || !urlStr.startsWith("https://")) {
         return false;
     }
 

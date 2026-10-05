@@ -4,7 +4,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <vector>
-#include "Config.h"
+#include "AppConfig.h"
 
 class APManager {
 public:

@@ -1,7 +1,7 @@
 #include "HTTPClientLayer.h"
 #include "Logger.h"
 
-HTTPClientLayer::HTTPClientLayer() : timeoutMs(15000), sslValidation(false) {}
+HTTPClientLayer::HTTPClientLayer() : timeoutMs(15000), clockReady(false) {}
 
 void HTTPClientLayer::begin() {
     logger.info("HTTPClient", "Initialized");
@@ -11,8 +11,12 @@ void HTTPClientLayer::setTimeout(int timeoutMs) {
     this->timeoutMs = timeoutMs;
 }
 
-void HTTPClientLayer::setSSLValidation(bool validate) {
-    this->sslValidation = validate;
+void HTTPClientLayer::setCACertificate(const String& certificate) {
+    caCertificate = certificate;
+}
+
+void HTTPClientLayer::setClockReady(bool ready) {
+    clockReady = ready;
 }
 
 int HTTPClientLayer::httpGET(const String& url, String& response, bool followRedirects) {
@@ -20,7 +24,7 @@ int HTTPClientLayer::httpGET(const String& url, String& response, bool followRed
 }
 
 int HTTPClientLayer::httpPOST(const String& url, const String& postData, String& response) {
-    return performRequest(true, url, postData, response, true);
+    return performRequest(true, url, postData, response, false);
 }
 
 void HTTPClientLayer::setCookie(const String& cookie) {
@@ -88,9 +92,15 @@ int HTTPClientLayer::performRequest(bool isPost, const String& url, const String
     bool isHTTPS = url.startsWith("https://");
     
     if (isHTTPS) {
-        if (!sslValidation) {
-            secureClient.setInsecure();
+        if (!clockReady) {
+            logger.error("HTTPClient", "HTTPS refused: synchronized system time is required for certificate validation");
+            return -1;
         }
+        if (caCertificate.length() == 0) {
+            logger.error("HTTPClient", "HTTPS refused: configure a trusted portal CA certificate");
+            return -1;
+        }
+        secureClient.setCACert(caCertificate.c_str());
         http.begin(secureClient, url);
     } else {
         http.begin(client, url);

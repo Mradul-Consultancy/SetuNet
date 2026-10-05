@@ -7,7 +7,7 @@
  */
 
 #include <Arduino.h>
-#include "Config.h"
+#include "AppConfig.h"
 #include "Logger.h"
 #include "CredentialStore.h"
 #include "WiFiManager.h"
@@ -16,6 +16,7 @@
 #include "PortalAuthEngine.h"
 #include "SessionManager.h"
 #include "ConnectivityMonitor.h"
+#include <time.h>
 
 Config config;
 CredentialStore credStore;
@@ -25,6 +26,24 @@ PortalDetector portalDetector(&httpClient);
 PortalAuthEngine authEngine(&httpClient, &portalDetector);
 SessionManager sessionMgr;
 ConnectivityMonitor connMonitor(&portalDetector);
+
+static void synchronizeClock() {
+    configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+    const unsigned long timeoutMs = 10000;
+    unsigned long startedAt = millis();
+
+    while (millis() - startedAt < timeoutMs) {
+        if (time(nullptr) >= 1700000000) {
+            httpClient.setClockReady(true);
+            logger.info("Main", "System clock synchronized for TLS verification");
+            return;
+        }
+        delay(250);
+    }
+
+    httpClient.setClockReady(false);
+    logger.warning("Main", "Clock sync unavailable; HTTPS requests will fail closed");
+}
 
 SystemState currentState = STATE_BOOT;
 SystemStatus systemStatus;
@@ -77,6 +96,12 @@ void loop() {
             
             logger.logf(INFO, "Main", "Config loaded: SSID=%s, Portal=%s", 
                        config.wifiSSID.c_str(), config.portalURL.c_str());
+
+            httpClient.setCACertificate(config.portalCACertificate);
+            if (config.routerEnabled) {
+                logger.warning("Main", "Router mode is disabled in this firmware build");
+                config.routerEnabled = false;
+            }
             
             currentState = STATE_WIFI_CONNECT;
             break;
@@ -94,6 +119,7 @@ void loop() {
                 systemStatus.wifiConnected = true;
                 systemStatus.ipAddress = wifiMgr.getIP().toString();
                 systemStatus.signalStrength = wifiMgr.getSignalStrength();
+                synchronizeClock();
                 
                 currentState = STATE_PORTAL_DETECT;
             } else {
@@ -121,7 +147,8 @@ void loop() {
         case STATE_PORTAL_AUTH:
             logger.info("Main", "Authenticating to portal...");
             
-            authEngine.begin(config.portalUsername, config.portalPassword, config.portalURL);
+            authEngine.begin(config.portalUsername, config.portalPassword, config.portalURL,
+                             config.portalUsernameField, config.portalPasswordField);
             
             systemStatus.authAttempts++;
             

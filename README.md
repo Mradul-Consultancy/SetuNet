@@ -24,13 +24,14 @@ An ESP32 Arduino prototype that connects to a configured Wi-Fi network, detects 
 - Probes known external HTTP endpoints for redirects or expected connectivity responses.
 - Uses a discovered redirect URL or configured portal URL to fetch the login page.
 - Parses common HTML `<form>` and `<input>` attributes, including hidden fields.
-- Submits form data using GET or POST.
+- Allows portal-specific username/password field names to be configured.
+- Submits credentials only through HTTPS POST; it refuses HTTP or GET credential submissions.
 - Verifies login by checking external connectivity rather than trusting generic success text.
 - Rechecks connectivity on a configurable interval (60 seconds by default).
 
 ### Not currently supported or verified
 
-- JavaScript-driven forms, browser challenges, multi-step login, and portal-specific APIs.
+- JavaScript-driven forms, browser challenges, multi-step login, and portal-specific APIs. These require a portal-specific implementation or browser engine and are not universally handled.
 - Every CSRF/session-token scheme, form control type, or portal redirect pattern.
 - Independent detection of portal session expiration.
 - Automatic configuration by serial commands or a web interface.
@@ -124,7 +125,7 @@ The PlatformIO project selects the ESP32 Arduino framework and its networking li
 
 Run these commands from this project directory.
 
-1. Copy `include/config.h.template` to `include/config.h`.
+1. Copy `include/config.h.template` to `include/config.h`, and copy `include/portal_ca.h.template` to `include/portal_ca.h`.
 2. Set the network and portal values locally:
 
    ```cpp
@@ -135,15 +136,36 @@ Run these commands from this project directory.
    #define PORTAL_PASS "your-portal-password"
    ```
 
-   The template portal URL is a placeholder/default, not confirmation of the current login endpoint. Verify the URL and form behavior on the live network. `include/config.h` is Git-ignored; do not commit it.
+   The template portal URL is a placeholder/default, not confirmation of the current login endpoint. Verify the URL and form behavior on the live network. Both `include/config.h` and `include/portal_ca.h` are Git-ignored; do not commit them.
 
-3. Compile the firmware:
+3. Obtain the trusted CA certificate for the portal's HTTPS endpoint from the portal/network administrator or another trusted certificate source. In `include/portal_ca.h`, replace the empty value with the PEM raw string literal:
+
+   ```cpp
+   static const char PORTAL_CA_CERTIFICATE[] PROGMEM = R"PORTAL_CA(
+   -----BEGIN CERTIFICATE-----
+   paste-the-trusted-CA-certificate-here
+   -----END CERTIFICATE-----
+   )PORTAL_CA";
+   ```
+
+   Replace the example body with the complete trusted CA PEM. Do not trust a certificate copied from an untrusted connection. HTTPS requests intentionally fail closed if the CA is missing or invalid. The device also requires a correct clock for certificate date checks; SetuNet attempts NTP synchronization after joining Wi-Fi. If the network blocks NTP before portal login, provide an authorized time source or RTC integration rather than disabling certificate checks.
+
+4. If the portal uses non-standard field names, set them explicitly:
+
+   ```cpp
+   #define PORTAL_USERNAME_FIELD "your-user-input-name"
+   #define PORTAL_PASSWORD_FIELD "your-password-input-name"
+   ```
+
+   Leave either value empty to use the parser's field inference. Hidden fields are still extracted from standard HTML forms.
+
+5. Compile the firmware:
 
    ```sh
    pio run
    ```
 
-4. With the ESP32 connected, upload and monitor:
+6. With the ESP32 connected, upload and monitor:
 
    ```sh
    pio run --target upload
@@ -172,7 +194,8 @@ Keep a sanitized example of the portal form structure (with all personal and ses
 
 ## Security
 
-- **TLS verification is disabled by default.** `HTTPClientLayer` uses `setInsecure()` unless validation is changed in code. This makes HTTPS vulnerable to man-in-the-middle attacks on untrusted networks. Add and validate a trusted CA certificate before using sensitive credentials.
+- **TLS verification is enabled and fail-closed.** HTTPS requests require synchronized system time and a configured trusted CA certificate. The firmware does not fall back to `setInsecure()`.
+- **Credentials are never submitted over HTTP or in a GET URL.** Login forms must use HTTPS and POST. Portals that require an insecure flow are rejected rather than sending account credentials in clear text.
 - **Credentials are compiled into the firmware** when supplied through `include/config.h`. Protect source code, build output, and device access.
 - **Preferences/NVS is not encrypted by this application.** Configure ESP32 flash/NVS encryption separately if protection at rest is required.
 - Avoid logging secrets, passwords, full authentication request bodies, or session cookies.
@@ -183,12 +206,12 @@ Keep a sanitized example of the portal form structure (with all personal and ses
 For a reliable, maintainable project, prioritize:
 
 1. **Portal fixtures and parser tests:** Add sanitized sample login pages for case/quote variations, relative actions, hidden CSRF values, multiple forms, and malformed HTML. Test generated requests without real credentials.
-2. **Portal-specific configuration:** Support explicit username/password field names, endpoint, and any portal-specific parameters instead of relying only on inference.
+2. **Portal-specific flow support:** Add only the exact portal-specific endpoint parameters and response checks confirmed from the live flow. JavaScript-based login may need a server-side/API integration or another platform; do not simulate it with brittle text matching.
 3. **Authentication state correctness:** Verify cookies/redirect flow and distinguish invalid credentials, server errors, timeout, and unverified internet access.
 4. **Recovery policy:** Use capped backoff and a clear state transition policy for Wi-Fi loss, portal failure, and repeated connectivity failure.
-5. **TLS and credential protection:** Implement certificate validation, avoid embedding real credentials in distributable builds, and document platform encryption setup.
+5. **Time and certificate lifecycle:** Validate NTP/RTC behavior on the target network, plan trusted CA rotation, and never disable certificate verification to bypass failures.
 6. **Hardware CI/release checks:** Build for the supported board, compile tests, execute tests on hardware, and publish measured results separately from estimates.
-7. **Router mode decision:** Either integrate and validate AP/NAT/DNS with an explicit test plan, or remove/disable those components and related claims until the feature is supported.
+7. **Router mode decision:** Keep router mode disabled until AP/NAT/DNS are integrated and validated with an explicit test plan.
 8. **Project hygiene:** Add a license, contribution guidance, version/release policy, and a sanitized portal test fixture policy.
 
 ## Documentation
@@ -199,4 +222,3 @@ For a reliable, maintainable project, prioritize:
 - [User guide draft](docs/USER_GUIDE.md)
 
 Some documents under `docs/` are historical or research drafts. Treat measurements and feature claims in those documents as unverified unless accompanied by reproducible test data.
-

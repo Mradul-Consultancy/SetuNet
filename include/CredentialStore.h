@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 #include <Preferences.h>
-#include "Config.h"
+#include "AppConfig.h"
 
 class CredentialStore {
 public:

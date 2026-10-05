@@ -17,6 +17,7 @@
 
 # Credentials (DO NOT COMMIT)
 include/config.h
+include/portal_ca.h
 credentials.txt
 
 # Logs

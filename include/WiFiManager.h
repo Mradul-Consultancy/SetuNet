@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 #include <WiFi.h>
-#include "Config.h"
+#include "AppConfig.h"
 
 class WiFiManager {
 public:
