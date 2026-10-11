@@ -1,13 +1,13 @@
 #include "WiFiManager.h"
 #include "Logger.h"
 
-WiFiManager::WiFiManager() : retryCount(0) {}
+WiFiManager::WiFiManager() : retryCount(0), serviceCallback(nullptr) {}
 
 bool WiFiManager::begin(const char* ssid, const char* password) {
     this->ssid = String(ssid);
     this->password = String(password);
     
-    WiFi.mode(WIFI_STA);
+    WiFi.mode(WIFI_AP_STA);
     WiFi.setAutoReconnect(true);
     
     logger.logf(INFO, "WiFiMgr", "Initialized with SSID: %s", ssid);
@@ -25,7 +25,14 @@ bool WiFiManager::connect() {
         logger.logf(INFO, "WiFiMgr", "Attempt %d/%d, waiting %dms...", 
                    retryCount + 1, MAX_RETRIES, retryDelayMs);
         
-        delay(retryDelayMs);
+        const unsigned long waitStarted = millis();
+        while (WiFi.status() != WL_CONNECTED &&
+               millis() - waitStarted < static_cast<unsigned long>(retryDelayMs)) {
+            if (serviceCallback) {
+                serviceCallback();
+            }
+            delay(50);
+        }
         retryCount++;
         
         if (WiFi.status() == WL_CONNECTED) {
@@ -52,6 +59,10 @@ bool WiFiManager::reconnect() {
 
 bool WiFiManager::isConnected() {
     return WiFi.status() == WL_CONNECTED;
+}
+
+void WiFiManager::setServiceCallback(void (*callback)()) {
+    serviceCallback = callback;
 }
 
 IPAddress WiFiManager::getIP() {

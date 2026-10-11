@@ -2,7 +2,7 @@
 
 An ESP32 Arduino prototype that connects to a configured Wi-Fi network, detects common captive-portal behavior, submits credentials to a standard HTML login form, and checks whether external connectivity is available.
 
-> **Status: prototype.** The firmware compiles for the PlatformIO `esp32dev` environment, but has not been validated on an ESP32 or against the live GLA portal. A successful build does not demonstrate that a particular portal can be authenticated. Router/AP/NAT/DNS components are not integrated into the application.
+> **Status: prototype.** The firmware compiles for the PlatformIO `esp32dev` environment, but has not been validated on an ESP32 or against the live GLA portal. A successful build does not demonstrate that a particular portal can be authenticated. A protected local setup AP and configuration dashboard are integrated; router/NAT/DNS forwarding is not.
 
 ## Contents
 
@@ -28,13 +28,14 @@ An ESP32 Arduino prototype that connects to a configured Wi-Fi network, detects 
 - Submits credentials only through HTTPS POST; it refuses HTTP or GET credential submissions.
 - Verifies login by checking external connectivity rather than trusting generic success text.
 - Rechecks connectivity on a configurable interval (60 seconds by default).
+- Hosts a local dashboard for connection status, settings, and retry actions on a password-protected setup Wi-Fi network.
 
 ### Not currently supported or verified
 
 - JavaScript-driven forms, browser challenges, multi-step login, and portal-specific APIs. These require a portal-specific implementation or browser engine and are not universally handled.
 - Every CSRF/session-token scheme, form control type, or portal redirect pattern.
 - Independent detection of portal session expiration.
-- Automatic configuration by serial commands or a web interface.
+- Cloud or remote dashboard access.
 - Router mode: AP/NAT/DNS source files exist, but the main application does not initialize them.
 - Live GLA login, hardware upload, reliability, throughput, or extended soak testing.
 
@@ -45,6 +46,8 @@ Portal behavior differs between networks and may change over time. Inspect the l
 ```mermaid
 flowchart TD
     Main["Application state machine<br/>src/main.cpp"]
+    Dashboard["Local setup dashboard<br/>src/Dashboard.cpp"]
+    SetupAP["Protected setup access point<br/>APManager"]
     Config["Configuration<br/>include/config.h + Preferences"]
     WiFi["Wi-Fi connection manager<br/>WiFiManager"]
     Detect["Portal and connectivity detector<br/>PortalDetector"]
@@ -56,12 +59,15 @@ flowchart TD
     Logger["Serial logger<br/>Logger"]
 
     Main --> Config
+    Main --> Dashboard
+    Dashboard --> SetupAP
     Main --> WiFi
     Main --> Detect
     Main --> Auth
     Main --> Session
     Main --> Monitor
     WiFi --> Network
+    SetupAP --> Dashboard
     Detect --> HTTP
     Auth --> Detect
     Auth --> HTTP
@@ -77,13 +83,26 @@ flowchart TD
 
 ### Startup and runtime flow
 
-1. `main.cpp` initializes serial logging and loads settings from ESP32 Preferences, falling back to compile-time values in `include/config.h`.
-2. `WiFiManager` joins the configured Wi-Fi network.
-3. `PortalDetector` checks external connectivity. If it cannot verify access, the application attempts the configured portal login flow.
-4. `PortalAuthEngine` fetches the login page, parses a supported standard HTML form, submits the credentials, and asks `PortalDetector` to verify connectivity.
-5. On verified access, `ConnectivityMonitor` periodically checks connectivity and the state machine retries authentication after a failed check.
+1. `main.cpp` starts the protected setup AP and local dashboard, then initializes settings from ESP32 Preferences or compile-time values in `include/config.h`.
+2. Invalid or missing credentials leave the device in setup mode for configuration.
+3. `WiFiManager` joins the configured Wi-Fi network while keeping the dashboard AP available.
+4. `PortalDetector` checks external connectivity. If it cannot verify access, the application attempts the configured portal login flow.
+5. `PortalAuthEngine` fetches the login page, parses a supported standard HTML form, submits the credentials, and asks `PortalDetector` to verify connectivity.
+6. On verified access, `ConnectivityMonitor` periodically checks connectivity and the state machine retries authentication after a failed check.
 
 `HTTPClientLayer` handles HTTP/HTTPS requests, headers, cookies, timeouts, and bounded response reads. `SessionManager` stores session bookkeeping; it does not independently establish whether the remote portal session remains valid.
+
+### Local dashboard
+
+At boot, the ESP32 starts a WPA2-protected setup network and serves a responsive local dashboard at `http://192.168.4.1`. The setup SSID and a newly generated password are printed to the USB serial monitor each boot. The dashboard shows Wi-Fi, internet, signal, uptime, and authentication status; it can save configuration to Preferences and retry a connection. It is available while the ESP32 also connects to the configured Wi-Fi network. A settings change restarts the device.
+
+The page never returns saved passwords. Blank password fields keep their existing values; an explicit checkbox is provided for an open Wi-Fi network. Dashboard traffic is local HTTP protected by the setup network's WPA2 password and a per-boot request token; it is not encrypted end-to-end. The AP password is intentionally shown on serial, so restrict physical/serial access. Saved credentials in ESP32 Preferences are not encrypted by this application.
+
+Use the **Demo** mode switch in the dashboard for presentations without an ESP32 connection. It displays clearly labeled simulated campus Wi-Fi, connectivity, uptime, and authentication data. Demo mode does not call device APIs, does not write settings, and disables save/retry controls. Choose **Real device** to return to live status and configuration.
+
+### Public presentation demo
+
+The static presentation dashboard is `docs/index.html`. To publish it, set **Repository Settings → Pages → Build and deployment → Source: Deploy from a branch**, select branch `main` and folder `/docs`, then save. GitHub Pages will publish it at `https://mradul-consultancy.github.io/SetuNet/`. The public page intentionally shows simulated data only. Its **Real device** view explains how to open the ESP32-hosted local dashboard; a public HTTPS page cannot access the device's private `192.168.4.1` network address.
 
 ## Repository layout
 
@@ -93,6 +112,7 @@ esp32-gla-wifi-autologin/
 ├── src/           Firmware implementation and application state machine
 ├── test/          PlatformIO Unity tests (require ESP32 hardware to execute)
 ├── docs/          Architecture and supporting project documents
+│   └── index.html Public presentation dashboard for GitHub Pages
 ├── scripts/       Build, upload, monitor, and test helper scripts
 ├── platformio.ini PlatformIO environments and ESP32 build options
 ├── README.md      Current setup, status, and limitations
@@ -103,6 +123,8 @@ Primary runtime components:
 
 | Component | Responsibility |
 |---|---|
+| `Dashboard` | Serves the local status and configuration UI/API |
+| `APManager` | Hosts the password-protected setup Wi-Fi network |
 | `WiFiManager` | Connects and reconnects the ESP32 station interface |
 | `HTTPClientLayer` | Sends HTTP/HTTPS requests and handles response metadata |
 | `PortalDetector` | Probes for captive-portal redirects and internet access |
@@ -198,6 +220,7 @@ Keep a sanitized example of the portal form structure (with all personal and ses
 - **Credentials are never submitted over HTTP or in a GET URL.** Login forms must use HTTPS and POST. Portals that require an insecure flow are rejected rather than sending account credentials in clear text.
 - **Credentials are compiled into the firmware** when supplied through `include/config.h`. Protect source code, build output, and device access.
 - **Preferences/NVS is not encrypted by this application.** Configure ESP32 flash/NVS encryption separately if protection at rest is required.
+- **Dashboard access is local HTTP over its WPA2-protected setup network.** The setup password is randomly generated each boot and printed to serial; restrict serial/physical access. The request token helps prevent cross-site submissions but does not encrypt traffic.
 - Avoid logging secrets, passwords, full authentication request bodies, or session cookies.
 - Use this software only on networks and accounts for which you are authorized.
 

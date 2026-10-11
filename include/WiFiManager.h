@@ -13,6 +13,7 @@ public:
     bool connect();
     bool reconnect();
     bool isConnected();
+    void setServiceCallback(void (*callback)());
     
     IPAddress getIP();
     IPAddress getGateway();
@@ -25,6 +26,7 @@ private:
     String ssid;
     String password;
     int retryCount;
+    void (*serviceCallback)();
     const int MAX_RETRIES = 20;
     const int RETRY_DELAYS[4] = {5000, 10000, 15000, 20000};
     

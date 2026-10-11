@@ -19,16 +19,23 @@ bool CredentialStore::saveCredentials(const Config& config) {
         return false;
     }
     
-    preferences.putString("wifi_ssid", config.wifiSSID);
-    preferences.putString("wifi_pass", config.wifiPassword);
-    preferences.putString("portal_user", config.portalUsername);
-    preferences.putString("portal_pass", config.portalPassword);
-    preferences.putString("portal_url", config.portalURL);
-    preferences.putUInt("check_interval", config.checkIntervalMs);
-    preferences.putUInt("http_timeout", config.httpTimeoutMs);
-    preferences.putUChar("max_retries", config.maxAuthRetries);
-    preferences.putUChar("max_wifi_retries", config.maxWiFiRetries);
-    preferences.putBool("router_enabled", config.routerEnabled);
+    bool success = preferences.putString("wifi_ssid", config.wifiSSID) == config.wifiSSID.length();
+    success = preferences.putString("wifi_pass", config.wifiPassword) == config.wifiPassword.length() && success;
+    success = preferences.putString("portal_user", config.portalUsername) == config.portalUsername.length() && success;
+    success = preferences.putString("portal_pass", config.portalPassword) == config.portalPassword.length() && success;
+    success = preferences.putString("portal_url", config.portalURL) == config.portalURL.length() && success;
+    success = preferences.putString("user_field", config.portalUsernameField) == config.portalUsernameField.length() && success;
+    success = preferences.putString("pass_field", config.portalPasswordField) == config.portalPasswordField.length() && success;
+    success = preferences.putUInt("check_interval", config.checkIntervalMs) > 0 && success;
+    success = preferences.putUInt("http_timeout", config.httpTimeoutMs) > 0 && success;
+    success = preferences.putUChar("max_retries", config.maxAuthRetries) > 0 && success;
+    success = preferences.putUChar("max_wifi_retries", config.maxWiFiRetries) > 0 && success;
+    success = preferences.putBool("router_enabled", config.routerEnabled) > 0 && success;
+
+    if (!success) {
+        logger.error("CredStore", "Failed to persist one or more configuration values");
+        return false;
+    }
     
     if (config.routerEnabled) {
         preferences.putString("ap_ssid", config.apSSID);
@@ -52,6 +59,8 @@ bool CredentialStore::loadCredentials(Config& config) {
     config.portalUsername = preferences.getString("portal_user", "");
     config.portalPassword = preferences.getString("portal_pass", "");
     config.portalURL = preferences.getString("portal_url", "");
+    config.portalUsernameField = preferences.getString("user_field", config.portalUsernameField);
+    config.portalPasswordField = preferences.getString("pass_field", config.portalPasswordField);
     config.checkIntervalMs = preferences.getUInt("check_interval", 60000);
     config.httpTimeoutMs = preferences.getUInt("http_timeout", 15000);
     config.maxAuthRetries = preferences.getUChar("max_retries", 5);
@@ -90,6 +99,11 @@ bool CredentialStore::validateCredentials(const Config& config) {
 
     if (!validateSSID(config.wifiSSID.c_str())) {
         logger.error("CredStore", "Invalid WiFi SSID");
+        return false;
+    }
+
+    if (!validateWiFiPassword(config.wifiPassword.c_str())) {
+        logger.error("CredStore", "Invalid WiFi password length");
         return false;
     }
     
@@ -138,6 +152,29 @@ bool CredentialStore::validateSSID(const char* ssid) {
         }
     }
     
+    return true;
+}
+
+bool CredentialStore::validateWiFiPassword(const char* password) {
+    if (!password) {
+        return false;
+    }
+
+    const size_t length = strlen(password);
+    if (length == 0 || (length >= 8 && length <= 63)) {
+        return true;
+    }
+
+    if (length != 64) {
+        return false;
+    }
+
+    for (size_t i = 0; i < length; i++) {
+        if (!isxdigit(static_cast<unsigned char>(password[i]))) {
+            return false;
+        }
+    }
+
     return true;
 }
 

@@ -23,6 +23,7 @@ private:
     const char* NAMESPACE = "portal_auth";
     
     bool validateSSID(const char* ssid);
+    bool validateWiFiPassword(const char* password);
     bool validateURL(const char* url);
     bool validateNonEmpty(const char* str);
 };

@@ -34,6 +34,7 @@ enum SystemState {
     STATE_PORTAL_AUTH,
     STATE_AUTHENTICATED,
     STATE_MONITORING,
+    STATE_SETUP,
     STATE_ERROR,
     STATE_RESTART,
     // Router mode states

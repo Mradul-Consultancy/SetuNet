@@ -28,4 +28,8 @@
 #define PORTAL_USERNAME_FIELD ""
 #define PORTAL_PASSWORD_FIELD ""
 
+// Dashboard setup network credentials are generated for every boot.
+// Join the printed "SetuNet-Setup-XXXX" network using the password shown
+// once on the USB serial monitor, then open http://192.168.4.1.
+
 #endif // PORTAL_USER_CONFIG_H

@@ -21,6 +21,8 @@ static Config validConfig() {
     config.portalUsername = "testuser";
     config.portalPassword = "testpass";
     config.portalURL = "https://portal.example/login";
+    config.portalUsernameField = "user";
+    config.portalPasswordField = "pass";
     return config;
 }
 
@@ -39,6 +41,8 @@ void test_save_and_load_credentials() {
     TEST_ASSERT_EQUAL_STRING("TestPassword", loadedConfig.wifiPassword.c_str());
     TEST_ASSERT_EQUAL_STRING("testuser", loadedConfig.portalUsername.c_str());
     TEST_ASSERT_EQUAL_STRING("testpass", loadedConfig.portalPassword.c_str());
+    TEST_ASSERT_EQUAL_STRING("user", loadedConfig.portalUsernameField.c_str());
+    TEST_ASSERT_EQUAL_STRING("pass", loadedConfig.portalPasswordField.c_str());
 }
 
 void test_validate_ssid() {
@@ -60,6 +64,25 @@ void test_validate_url() {
     config.portalURL = "https://valid.com";
     TEST_ASSERT_TRUE(credStore.validateCredentials(config));
     config.portalURL = "https://";
+    TEST_ASSERT_FALSE(credStore.validateCredentials(config));
+}
+
+void test_validate_wifi_password() {
+    Config config = validConfig();
+    config.wifiPassword = "";
+    TEST_ASSERT_TRUE(credStore.validateCredentials(config));
+    config.wifiPassword = "short";
+    TEST_ASSERT_FALSE(credStore.validateCredentials(config));
+    config.wifiPassword = "validpass";
+    TEST_ASSERT_TRUE(credStore.validateCredentials(config));
+    String psk64;
+    for (int i = 0; i < 64; i++) {
+        psk64 += 'a';
+    }
+    config.wifiPassword = psk64;
+    TEST_ASSERT_TRUE(credStore.validateCredentials(config));
+    psk64.setCharAt(0, 'g');
+    config.wifiPassword = psk64;
     TEST_ASSERT_FALSE(credStore.validateCredentials(config));
 }
 
@@ -93,6 +116,7 @@ void setup() {
     RUN_TEST(test_save_and_load_credentials);
     RUN_TEST(test_validate_ssid);
     RUN_TEST(test_validate_url);
+    RUN_TEST(test_validate_wifi_password);
     RUN_TEST(test_router_mode_is_rejected);
     RUN_TEST(test_clear_credentials);
     RUN_TEST(test_default_config_does_not_embed_credentials);

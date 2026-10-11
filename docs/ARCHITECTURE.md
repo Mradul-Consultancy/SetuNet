@@ -17,7 +17,7 @@ The ESP32 GLA WiFi Auto-Login System is a modular embedded application that auto
 
 ### Implementation and verification status
 
-This is a design/architecture document, not evidence that every described behavior is implemented or validated. The current client-mode firmware compiles for `esp32dev`, but has not been uploaded to hardware or tested against the live GLA portal. `PortalAuthEngine` supports common HTML input forms; it does not execute JavaScript or implement portal-specific challenges. Session expiry is not directly checked. AP/NAT/DNS components exist as prototype code but are not integrated into the main state machine. Treat the performance and memory figures below as estimates, not measured results.
+This is a design/architecture document, not evidence that every described behavior is validated. The current client-mode firmware compiles for `esp32dev`, but has not been uploaded to hardware or tested against the live GLA portal. A password-protected setup AP and local dashboard are integrated; router/NAT/DNS forwarding is not. `PortalAuthEngine` supports common HTML input forms; it does not execute JavaScript or implement portal-specific challenges. Session expiry is not directly checked. Treat the performance and memory figures below as estimates, not measured results.
 
 ### Key Design Principles
 
@@ -32,12 +32,12 @@ This is a design/architecture document, not evidence that every described behavi
 ```
 ┌─────────────────────────────────────────┐
 │         Application Layer               │
-│  (State Machine, Main Loop)             │
+│ (State Machine, Dashboard, Main Loop)   │
 └─────────────────────────────────────────┘
            ↓
 ┌─────────────────────────────────────────┐
 │         Component Layer                 │
-│  (WiFi, Auth, Monitor, Router)          │
+│ (Dashboard, Setup AP, WiFi, Auth, Monitor)│
 └─────────────────────────────────────────┘
            ↓
 ┌─────────────────────────────────────────┐
@@ -162,20 +162,34 @@ This is a design/architecture document, not evidence that every described behavi
 
 **Memory**: ~2 KB
 
-### Router Mode Components
+### Setup AP and Router Components
 
 #### 9. APManager
-**Purpose**: Manage WiFi Access Point
+**Purpose**: Manage the password-protected local setup Access Point
 
 **Responsibilities**:
 - Start/stop Access Point
 - Configure AP settings (IP, subnet, channel)
 - Monitor client connections
 - Enforce client limits (max 4)
+- Keep the setup dashboard reachable alongside the station connection
 
 **Dependencies**: WiFi library, Logger
 
 **Memory**: ~5 KB
+
+#### Local Dashboard
+**Purpose**: Provide local status and configuration through a responsive web interface
+
+**Responsibilities**:
+- Serve the dashboard and status API from the ESP32
+- Validate and persist Wi-Fi and portal settings
+- Require a per-boot request token for configuration and retry actions
+- Avoid returning configured passwords to the browser
+
+**Dependencies**: Arduino WebServer, APManager, CredentialStore
+
+The setup AP uses a generated WPA2 password printed to the serial monitor on each boot. Dashboard requests use local HTTP protected by that AP password; traffic is not encrypted end-to-end.
 
 #### 10. NATRouter
 **Purpose**: Route packets between AP and STA interfaces
@@ -226,29 +240,30 @@ The system uses a finite state machine for main loop control:
 
 1. **BOOT**: Initial state, transition to LOAD_CONFIG
 2. **LOAD_CONFIG**: Load credentials from NVS
-3. **WIFI_CONNECT**: Connect to WiFi network
-4. **PORTAL_DETECT**: Detect captive portal
-5. **PORTAL_AUTH**: Authenticate to portal
-6. **AUTHENTICATED**: Authentication successful
-7. **MONITORING**: Monitor connectivity (60s loop)
-8. **ERROR**: Error state, wait 60s then restart
-9. **RESTART**: Restart ESP32
+3. **SETUP**: Wait for dashboard configuration or an explicit connection retry
+4. **WIFI_CONNECT**: Connect to WiFi network
+5. **PORTAL_DETECT**: Detect captive portal
+6. **PORTAL_AUTH**: Authenticate to portal
+7. **AUTHENTICATED**: Authentication successful
+8. **MONITORING**: Monitor connectivity (60s loop)
+9. **ERROR**: Error state, wait 60s then restart
+10. **RESTART**: Restart ESP32
 
 ### State Transitions
 
 ```
 BOOT → LOAD_CONFIG
 LOAD_CONFIG → WIFI_CONNECT (credentials valid)
-LOAD_CONFIG → ERROR (credentials invalid)
+LOAD_CONFIG → SETUP (credentials missing/invalid)
 
 WIFI_CONNECT → PORTAL_DETECT (connected)
-WIFI_CONNECT → ERROR (max retries)
+WIFI_CONNECT → SETUP (connection failed)
 
 PORTAL_DETECT → PORTAL_AUTH (portal detected)
 PORTAL_DETECT → AUTHENTICATED (no portal)
 
 PORTAL_AUTH → AUTHENTICATED (success)
-PORTAL_AUTH → ERROR (max retries)
+PORTAL_AUTH → SETUP (max retries)
 
 AUTHENTICATED → MONITORING
 
@@ -257,6 +272,8 @@ MONITORING → WIFI_CONNECT (WiFi disconnected)
 MONITORING → RESTART (max failures)
 
 ERROR → RESTART (after 60s)
+SETUP → WIFI_CONNECT (dashboard retry)
+SETUP → LOAD_CONFIG (device restart after saving configuration)
 ```
 
 ### Router Mode State Machine
