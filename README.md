@@ -1,247 +1,184 @@
-# ESP32 Captive Portal Login
+# SetuNet
 
-An ESP32 Arduino prototype that connects to a configured Wi-Fi network, detects common captive-portal behavior, submits credentials to a standard HTML login form, and checks whether external connectivity is available.
+**A local-first ESP32 captive-portal assistant with a responsive device dashboard and a public presentation demo.**
 
-> **Status: prototype.** The firmware compiles for the PlatformIO `esp32dev` environment, but has not been validated on an ESP32 or against the live GLA portal. A successful build does not demonstrate that a particular portal can be authenticated. A protected local setup AP and configuration dashboard are integrated; router/NAT/DNS forwarding is not.
+SetuNet connects an ESP32 to an authorized Wi-Fi network, detects common captive-portal behavior, submits supported HTTPS login forms, and monitors connectivity. A password-protected setup network lets you configure and inspect the device from a phone or computer.
 
-## Contents
+| | |
+|---|---|
+| **Presentation demo** | [mradul-consultancy.github.io/SetuNet](https://mradul-consultancy.github.io/SetuNet/) |
+| **Source repository** | [github.com/Mradul-Consultancy/SetuNet](https://github.com/Mradul-Consultancy/SetuNet) |
+| **Target** | ESP32 Dev Module (`esp32dev`) |
+| **Framework** | Arduino via PlatformIO |
+| **Project status** | Prototype; firmware builds, but live portal and hardware behavior still need field validation |
 
-- [Capabilities and limitations](#capabilities-and-limitations)
-- [High-level architecture](#high-level-architecture)
-- [Repository layout](#repository-layout)
-- [Requirements](#requirements)
-- [Configure and build](#configure-and-build)
-- [Validate on hardware](#validate-on-hardware)
-- [Security](#security)
-- [Recommended next steps](#recommended-next-steps)
-- [Documentation](#documentation)
+> **Demo data is simulated.** The public site is for presentations and does not connect to an ESP32. Live device status is available only from the dashboard hosted by the physical device on its local setup network.
 
-## Capabilities and limitations
+## Highlights
 
-### Current client-mode behavior
+- Joins a configured Wi-Fi network in ESP32 station mode.
+- Hosts a separate WPA2-protected setup access point and local web dashboard.
+- Shows Wi-Fi, internet/authentication, signal, uptime, and login-attempt status.
+- Saves supported configuration to ESP32 Preferences and offers a connection retry action.
+- Detects common captive portal redirects and parses standard HTML forms, including hidden fields.
+- Sends portal credentials only through HTTPS POST with trusted CA verification; refuses insecure HTTP/GET login submissions.
+- Monitors connectivity and retries portal authentication after failures.
+- Includes a public presentation dashboard with visibly labeled simulated data.
 
-- Connects to a configured Wi-Fi SSID.
-- Probes known external HTTP endpoints for redirects or expected connectivity responses.
-- Uses a discovered redirect URL or configured portal URL to fetch the login page.
-- Parses common HTML `<form>` and `<input>` attributes, including hidden fields.
-- Allows portal-specific username/password field names to be configured.
-- Submits credentials only through HTTPS POST; it refuses HTTP or GET credential submissions.
-- Verifies login by checking external connectivity rather than trusting generic success text.
-- Rechecks connectivity on a configurable interval (60 seconds by default).
-- Hosts a local dashboard for connection status, settings, and retry actions on a password-protected setup Wi-Fi network.
+## Try the public demo
 
-### Not currently supported or verified
+Open **[the SetuNet presentation demo](https://mradul-consultancy.github.io/SetuNet/)**. It starts in Demo mode and shows illustrative network and authentication values. Choose **Real device** to see the instructions for using the ESP32-hosted dashboard.
 
-- JavaScript-driven forms, browser challenges, multi-step login, and portal-specific APIs. These require a portal-specific implementation or browser engine and are not universally handled.
-- Every CSRF/session-token scheme, form control type, or portal redirect pattern.
-- Independent detection of portal session expiration.
-- Cloud or remote dashboard access.
-- Router mode: AP/NAT/DNS source files exist, but the main application does not initialize them.
-- Live GLA login, hardware upload, reliability, throughput, or extended soak testing.
+The public site cannot reach the device’s private `192.168.4.1` address. Demo values are not telemetry, test results, or proof of a successful portal login.
 
-Portal behavior differs between networks and may change over time. Inspect the live portal and test with the intended account and hardware before relying on this firmware.
+## Hardware dashboard
 
-## High-level architecture
+After uploading the firmware:
+
+1. Open the PlatformIO serial monitor at `115200` baud.
+2. Join the `SetuNet-Setup-XXXX` Wi-Fi network reported at boot, using the generated password printed on the serial monitor.
+3. Open **http://192.168.4.1** in a browser.
+4. Review the connection status, configure network/portal settings if needed, or request a retry.
+
+The setup access point remains available while the ESP32 attempts to connect to the configured Wi-Fi. A saved settings change restarts the device. Passwords are never prefilled into the dashboard; leave a password field empty to retain its saved value. Use the explicit open-network option only for an unprotected Wi-Fi network.
+
+## Build and upload
+
+### Requirements
+
+- ESP32 Dev Module or a compatible ESP32 board
+- USB data cable and the correct USB-to-serial driver
+- [PlatformIO Core](https://platformio.org/install/cli) or the PlatformIO extension for VS Code
+- Access to a Wi-Fi network and portal account you are authorized to use
+
+### Configure local credentials
+
+From the project root, copy the templates:
+
+```text
+include/config.h.template   → include/config.h
+include/portal_ca.h.template → include/portal_ca.h
+```
+
+Set your local values in `include/config.h`:
+
+```cpp
+#define WIFI_SSID "your-network-name"
+#define WIFI_PASSWORD "your-wifi-password"
+#define PORTAL_URL "https://your-actual-login-page/"
+#define PORTAL_USER "your-authorized-portal-username"
+#define PORTAL_PASS "your-portal-password"
+```
+
+The local `include/config.h` and `include/portal_ca.h` are Git-ignored. Do not commit real credentials or certificates copied from an untrusted connection. Values compiled from `config.h` are embedded in the firmware image; the dashboard can also save settings to Preferences.
+
+If the portal uses non-standard form input names, set:
+
+```cpp
+#define PORTAL_USERNAME_FIELD "username-input-name"
+#define PORTAL_PASSWORD_FIELD "password-input-name"
+```
+
+Leave them empty to use field inference.
+
+### Configure HTTPS trust
+
+HTTPS login fails closed unless `include/portal_ca.h` contains the appropriate trusted CA certificate and the device clock is valid. Add the trusted PEM certificate in the template’s provided C++ raw string literal. Obtain the trust anchor from the network administrator or another trusted source. SetuNet attempts NTP synchronization after Wi-Fi connection; if the network prevents time synchronization before login, use an authorized time source or RTC rather than disabling TLS verification.
+
+### Compile, flash, and monitor
+
+```sh
+pio run -e esp32dev
+pio run -e esp32dev --target upload
+pio device monitor -b 115200
+```
+
+Change the board and upload settings in `platformio.ini` if you use another supported ESP32 board.
+
+## Architecture
 
 ```mermaid
 flowchart TD
-    Main["Application state machine<br/>src/main.cpp"]
-    Dashboard["Local setup dashboard<br/>src/Dashboard.cpp"]
-    SetupAP["Protected setup access point<br/>APManager"]
-    Config["Configuration<br/>include/config.h + Preferences"]
-    WiFi["Wi-Fi connection manager<br/>WiFiManager"]
-    Detect["Portal and connectivity detector<br/>PortalDetector"]
-    Auth["HTML form authentication<br/>PortalAuthEngine"]
-    HTTP["HTTP/HTTPS transport<br/>HTTPClientLayer"]
-    Session["Session bookkeeping<br/>SessionManager"]
-    Monitor["Periodic connectivity monitor<br/>ConnectivityMonitor"]
-    Network["Wi-Fi network / captive portal"]
-    Logger["Serial logger<br/>Logger"]
+    Browser["Phone or computer browser"]
+    Demo["Public presentation demo<br/>docs/index.html<br/>simulated data only"]
+    Setup["Protected setup Wi-Fi<br/>APManager"]
+    Dashboard["Local device dashboard<br/>Dashboard / WebServer"]
+    Main["Firmware state machine<br/>src/main.cpp"]
+    Config["Configuration<br/>Preferences + local config"]
+    WiFi["Wi-Fi station manager"]
+    Detect["Portal and connectivity detector"]
+    Auth["Standard HTML form authentication"]
+    HTTP["HTTP / HTTPS transport<br/>trusted CA required"]
+    Portal["Authorized Wi-Fi / captive portal"]
 
+    Browser --> Demo
+    Browser --> Setup
+    Setup --> Dashboard
+    Dashboard --> Main
     Main --> Config
-    Main --> Dashboard
-    Dashboard --> SetupAP
     Main --> WiFi
     Main --> Detect
     Main --> Auth
-    Main --> Session
-    Main --> Monitor
-    WiFi --> Network
-    SetupAP --> Dashboard
     Detect --> HTTP
-    Auth --> Detect
     Auth --> HTTP
-    HTTP --> Network
-    Monitor --> Detect
-    Main --> Logger
-    WiFi --> Logger
-    Detect --> Logger
-    Auth --> Logger
-    HTTP --> Logger
-    Monitor --> Logger
+    WiFi --> Portal
+    HTTP --> Portal
 ```
 
-### Startup and runtime flow
-
-1. `main.cpp` starts the protected setup AP and local dashboard, then initializes settings from ESP32 Preferences or compile-time values in `include/config.h`.
-2. Invalid or missing credentials leave the device in setup mode for configuration.
-3. `WiFiManager` joins the configured Wi-Fi network while keeping the dashboard AP available.
-4. `PortalDetector` checks external connectivity. If it cannot verify access, the application attempts the configured portal login flow.
-5. `PortalAuthEngine` fetches the login page, parses a supported standard HTML form, submits the credentials, and asks `PortalDetector` to verify connectivity.
-6. On verified access, `ConnectivityMonitor` periodically checks connectivity and the state machine retries authentication after a failed check.
-
-`HTTPClientLayer` handles HTTP/HTTPS requests, headers, cookies, timeouts, and bounded response reads. `SessionManager` stores session bookkeeping; it does not independently establish whether the remote portal session remains valid.
-
-### Local dashboard
-
-At boot, the ESP32 starts a WPA2-protected setup network and serves a responsive local dashboard at `http://192.168.4.1`. The setup SSID and a newly generated password are printed to the USB serial monitor each boot. The dashboard shows Wi-Fi, internet, signal, uptime, and authentication status; it can save configuration to Preferences and retry a connection. It is available while the ESP32 also connects to the configured Wi-Fi network. A settings change restarts the device.
-
-The page never returns saved passwords. Blank password fields keep their existing values; an explicit checkbox is provided for an open Wi-Fi network. Dashboard traffic is local HTTP protected by the setup network's WPA2 password and a per-boot request token; it is not encrypted end-to-end. The AP password is intentionally shown on serial, so restrict physical/serial access. Saved credentials in ESP32 Preferences are not encrypted by this application.
-
-Use the **Demo** mode switch in the dashboard for presentations without an ESP32 connection. It displays clearly labeled simulated campus Wi-Fi, connectivity, uptime, and authentication data. Demo mode does not call device APIs, does not write settings, and disables save/retry controls. Choose **Real device** to return to live status and configuration.
-
-### Public presentation demo
-
-The static presentation dashboard is `docs/index.html`. A `docs/.nojekyll` marker keeps Jekyll from parsing historical Markdown research documents as templates. To publish it, set **Repository Settings → Pages → Build and deployment → Source: Deploy from a branch**, select branch `main` and folder `/docs`, then save. GitHub Pages will publish it at `https://mradul-consultancy.github.io/SetuNet/`. The public page intentionally shows simulated data only. Its **Real device** view explains how to open the ESP32-hosted local dashboard; a public HTTPS page cannot access the device's private `192.168.4.1` network address.
+The firmware starts its protected setup access point and dashboard, loads settings from Preferences or compile-time defaults, connects as a Wi-Fi station, detects portal behavior, and attempts a supported login when needed. The connectivity monitor periodically checks access and triggers recovery behavior.
 
 ## Repository layout
 
 ```text
-esp32-gla-wifi-autologin/
-├── include/       Component interfaces, configuration types, config template
-├── src/           Firmware implementation and application state machine
-├── test/          PlatformIO Unity tests (require ESP32 hardware to execute)
-├── docs/          Architecture and supporting project documents
-│   └── index.html Public presentation dashboard for GitHub Pages
-├── scripts/       Build, upload, monitor, and test helper scripts
-├── platformio.ini PlatformIO environments and ESP32 build options
-├── README.md      Current setup, status, and limitations
-└── GETTING_STARTED.md
+.
+├── docs/
+│   ├── index.html          Public static presentation demo
+│   ├── .nojekyll           Prevents Jekyll parsing unrelated research documents
+│   └── ...                 Architecture and supporting documentation
+├── include/                Firmware interfaces and configuration templates
+├── scripts/                Build, flash, monitor, and test helper scripts
+├── src/                    Firmware implementation and application state machine
+├── test/                   PlatformIO Unity tests (execute on ESP32 hardware)
+├── platformio.ini          ESP32 build and test environments
+├── GETTING_STARTED.md      Hardware setup and validation guide
+└── README.md               Project overview
 ```
 
-Primary runtime components:
+## Validation and limitations
 
-| Component | Responsibility |
-|---|---|
-| `Dashboard` | Serves the local status and configuration UI/API |
-| `APManager` | Hosts the password-protected setup Wi-Fi network |
-| `WiFiManager` | Connects and reconnects the ESP32 station interface |
-| `HTTPClientLayer` | Sends HTTP/HTTPS requests and handles response metadata |
-| `PortalDetector` | Probes for captive-portal redirects and internet access |
-| `PortalAuthEngine` | Parses a basic login form and submits its fields |
-| `SessionManager` | Keeps local session state and elapsed-time bookkeeping |
-| `ConnectivityMonitor` | Runs periodic connectivity checks |
-| `CredentialStore` | Reads and writes settings in ESP32 Preferences |
-| `Logger` | Writes leveled diagnostic messages to the serial console |
+The `esp32dev` firmware build has been verified with PlatformIO. This confirms compilation only; it does not establish that the device works with a particular board, Wi-Fi network, or live captive portal. The public GitHub Pages presentation demo has been deployed and browser-checked.
 
-## Requirements
+Portal flows differ and may change. The current form parser is not a browser engine and does not support:
 
-- ESP32 Dev Module or a compatible ESP32 board
-- USB data cable and suitable USB-to-serial driver
-- PlatformIO Core or the PlatformIO IDE extension for VS Code
-- Authorized access to the target Wi-Fi network and captive portal
+- JavaScript-driven challenges or multi-step login flows
+- Every CSRF, cookie, redirect, or form-control pattern
+- Guaranteed independent portal-session-expiry detection
+- Arbitrary portal APIs
 
-The PlatformIO project selects the ESP32 Arduino framework and its networking libraries.
+Router, NAT, and DNS forwarding are **not integrated** into the running application. The integrated setup AP is for configuration and local dashboard access, not internet sharing. Live GLA portal testing, physical-board upload, recovery testing, and extended soak testing remain to be completed.
 
-## Configure and build
-
-Run these commands from this project directory.
-
-1. Copy `include/config.h.template` to `include/config.h`, and copy `include/portal_ca.h.template` to `include/portal_ca.h`.
-2. Set the network and portal values locally:
-
-   ```cpp
-   #define WIFI_SSID "your-network-name"
-   #define WIFI_PASSWORD "your-wifi-password"
-   #define PORTAL_URL "https://your-actual-login-page/"
-   #define PORTAL_USER "your-portal-username"
-   #define PORTAL_PASS "your-portal-password"
-   ```
-
-   The template portal URL is a placeholder/default, not confirmation of the current login endpoint. Verify the URL and form behavior on the live network. Both `include/config.h` and `include/portal_ca.h` are Git-ignored; do not commit them.
-
-3. Obtain the trusted CA certificate for the portal's HTTPS endpoint from the portal/network administrator or another trusted certificate source. In `include/portal_ca.h`, replace the empty value with the PEM raw string literal:
-
-   ```cpp
-   static const char PORTAL_CA_CERTIFICATE[] PROGMEM = R"PORTAL_CA(
-   -----BEGIN CERTIFICATE-----
-   paste-the-trusted-CA-certificate-here
-   -----END CERTIFICATE-----
-   )PORTAL_CA";
-   ```
-
-   Replace the example body with the complete trusted CA PEM. Do not trust a certificate copied from an untrusted connection. HTTPS requests intentionally fail closed if the CA is missing or invalid. The device also requires a correct clock for certificate date checks; SetuNet attempts NTP synchronization after joining Wi-Fi. If the network blocks NTP before portal login, provide an authorized time source or RTC integration rather than disabling certificate checks.
-
-4. If the portal uses non-standard field names, set them explicitly:
-
-   ```cpp
-   #define PORTAL_USERNAME_FIELD "your-user-input-name"
-   #define PORTAL_PASSWORD_FIELD "your-password-input-name"
-   ```
-
-   Leave either value empty to use the parser's field inference. Hidden fields are still extracted from standard HTML forms.
-
-5. Compile the firmware:
-
-   ```sh
-   pio run
-   ```
-
-6. With the ESP32 connected, upload and monitor:
-
-   ```sh
-   pio run --target upload
-   pio device monitor
-   ```
-
-The default PlatformIO environment is `esp32dev`. Adjust the board and upload settings in `platformio.ini` for a different device. To compile the test firmware:
+The Unity test firmware requires an ESP32 and serial connection to execute:
 
 ```sh
 pio test -e esp32dev_test
 ```
 
-The Unity test suites execute on a connected ESP32 and serial port; `--without-uploading` does not make them host-only tests.
-
-## Validate on hardware
-
-Before treating the project as usable on a specific network:
-
-- Record the login page URL, form method/action, input names, hidden fields, cookies, and redirects using the browser's developer tools. Do not share credentials or session cookies.
-- Confirm the page is a standard HTML form and compare its fields with the supported parser behavior.
-- Test successful and unsuccessful credentials; confirm a failed login is not mistaken for internet access.
-- Test Wi-Fi loss/recovery, portal/session expiry, and connectivity-check behavior.
-- Run an extended stability test and record board, firmware version, network conditions, and results.
-
-Keep a sanitized example of the portal form structure (with all personal and session data removed) if repeatable parser tests are needed.
-
 ## Security
 
-- **TLS verification is enabled and fail-closed.** HTTPS requests require synchronized system time and a configured trusted CA certificate. The firmware does not fall back to `setInsecure()`.
-- **Credentials are never submitted over HTTP or in a GET URL.** Login forms must use HTTPS and POST. Portals that require an insecure flow are rejected rather than sending account credentials in clear text.
-- **Credentials are compiled into the firmware** when supplied through `include/config.h`. Protect source code, build output, and device access.
-- **Preferences/NVS is not encrypted by this application.** Configure ESP32 flash/NVS encryption separately if protection at rest is required.
-- **Dashboard access is local HTTP over its WPA2-protected setup network.** The setup password is randomly generated each boot and printed to serial; restrict serial/physical access. The request token helps prevent cross-site submissions but does not encrypt traffic.
-- Avoid logging secrets, passwords, full authentication request bodies, or session cookies.
-- Use this software only on networks and accounts for which you are authorized.
-
-## Recommended next steps
-
-For a reliable, maintainable project, prioritize:
-
-1. **Portal fixtures and parser tests:** Add sanitized sample login pages for case/quote variations, relative actions, hidden CSRF values, multiple forms, and malformed HTML. Test generated requests without real credentials.
-2. **Portal-specific flow support:** Add only the exact portal-specific endpoint parameters and response checks confirmed from the live flow. JavaScript-based login may need a server-side/API integration or another platform; do not simulate it with brittle text matching.
-3. **Authentication state correctness:** Verify cookies/redirect flow and distinguish invalid credentials, server errors, timeout, and unverified internet access.
-4. **Recovery policy:** Use capped backoff and a clear state transition policy for Wi-Fi loss, portal failure, and repeated connectivity failure.
-5. **Time and certificate lifecycle:** Validate NTP/RTC behavior on the target network, plan trusted CA rotation, and never disable certificate verification to bypass failures.
-6. **Hardware CI/release checks:** Build for the supported board, compile tests, execute tests on hardware, and publish measured results separately from estimates.
-7. **Router mode decision:** Keep router mode disabled until AP/NAT/DNS are integrated and validated with an explicit test plan.
-8. **Project hygiene:** Add a license, contribution guidance, version/release policy, and a sanitized portal test fixture policy.
+- Use only networks and accounts you are authorized to access.
+- Portal credentials are sent only over HTTPS POST; the firmware does not bypass certificate verification.
+- Configure a trusted portal CA and valid clock before relying on HTTPS login.
+- The setup Wi-Fi password is generated at boot and printed to serial. Restrict physical and serial access.
+- The local dashboard uses HTTP over the protected setup network. Wi-Fi protection and a per-boot request token do **not** provide end-to-end encryption; do not use it on an untrusted setup network.
+- ESP32 Preferences/NVS is not encrypted by this application. Configure hardware flash/NVS encryption separately if required.
+- Never publish `config.h`, portal CA material, account passwords, session cookies, or real network credentials.
 
 ## Documentation
 
 - [Getting started](GETTING_STARTED.md)
-- [Architecture details](docs/ARCHITECTURE.md)
+- [Architecture](docs/ARCHITECTURE.md)
 - [API reference draft](docs/API_REFERENCE.md)
 - [User guide draft](docs/USER_GUIDE.md)
+- [Presentation demo](https://mradul-consultancy.github.io/SetuNet/)
 
-Some documents under `docs/` are historical or research drafts. Treat measurements and feature claims in those documents as unverified unless accompanied by reproducible test data.
+Some documents under `docs/` are historical research or design drafts. Treat their proposed features, measurements, and claims as unverified unless accompanied by reproducible test evidence.
