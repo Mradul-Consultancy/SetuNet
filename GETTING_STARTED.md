@@ -44,7 +44,7 @@ The dashboard can save Wi-Fi and portal settings, show connection status, and re
 
 For a presentation, select **Demo** in the dashboard header. It displays simulated sample data and disables settings and retry actions; it does not change or contact the device. Select **Real device** to return to the ESP32's live status and controls.
 
-The static presentation site is `docs/index.html`. To publish it, set repository **Settings → Pages → Build and deployment → Source: Deploy from a branch**, select `main` and `/docs`, and save. It will be available at `https://mradul-consultancy.github.io/SetuNet/` once GitHub completes its first deployment. The public demo is intentionally separate from private, hardware-hosted device status.
+The static presentation site is `docs/index.html`; `docs/.nojekyll` prevents unrelated Markdown research documents from being parsed during deployment. To publish it, set repository **Settings → Pages → Build and deployment → Source: Deploy from a branch**, select `main` and `/docs`, and save. It will be available at `https://mradul-consultancy.github.io/SetuNet/` once GitHub completes its first deployment. The public demo is intentionally separate from private, hardware-hosted device status.
 
 ## 5. Validate on hardware
 

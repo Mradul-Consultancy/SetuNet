@@ -102,7 +102,7 @@ Use the **Demo** mode switch in the dashboard for presentations without an ESP32
 
 ### Public presentation demo
 
-The static presentation dashboard is `docs/index.html`. To publish it, set **Repository Settings → Pages → Build and deployment → Source: Deploy from a branch**, select branch `main` and folder `/docs`, then save. GitHub Pages will publish it at `https://mradul-consultancy.github.io/SetuNet/`. The public page intentionally shows simulated data only. Its **Real device** view explains how to open the ESP32-hosted local dashboard; a public HTTPS page cannot access the device's private `192.168.4.1` network address.
+The static presentation dashboard is `docs/index.html`. A `docs/.nojekyll` marker keeps Jekyll from parsing historical Markdown research documents as templates. To publish it, set **Repository Settings → Pages → Build and deployment → Source: Deploy from a branch**, select branch `main` and folder `/docs`, then save. GitHub Pages will publish it at `https://mradul-consultancy.github.io/SetuNet/`. The public page intentionally shows simulated data only. Its **Real device** view explains how to open the ESP32-hosted local dashboard; a public HTTPS page cannot access the device's private `192.168.4.1` network address.
 
 ## Repository layout
 
